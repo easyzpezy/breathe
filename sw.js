@@ -1,5 +1,5 @@
-/* Breathe PWA service worker — cache-first, offline-capable */
-const CACHE = 'breathe-v1';
+/* Breathe PWA service worker — v2: network-first for the app shell so updates reach devices */
+const CACHE = 'breathe-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -25,6 +25,19 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  const isShell = e.request.mode === 'navigate' || e.request.destination === 'document';
+  if (isShell) {
+    /* network-first: always try fresh app, fall back to cache offline */
+    e.respondWith(
+      fetch(e.request).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put('./index.html', copy));
+        return res;
+      }).catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+  /* assets: cache-first */
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then(
       (hit) =>
@@ -33,7 +46,7 @@ self.addEventListener('fetch', (e) => {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(e.request, copy));
           return res;
-        }).catch(() => caches.match('./index.html'))
+        })
     )
   );
 });

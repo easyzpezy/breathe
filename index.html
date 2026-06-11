@@ -340,6 +340,8 @@ const CIRC=2*Math.PI*48.5;
 /* ---------- audio: soft chimes ---------- */
 let actx=null, master=null;
 function ensureAudio(){
+  /* iOS: route Web Audio as media playback so it plays even with the silent switch on (iOS 16.4+) */
+  try{ if('audioSession' in navigator){ navigator.audioSession.type='playback'; } }catch(e){}
   if(!actx){
     actx=new (window.AudioContext||window.webkitAudioContext)();
     master=actx.createGain();
@@ -347,7 +349,15 @@ function ensureAudio(){
     master.connect(actx.destination);
   }
   if(actx.state==='suspended') actx.resume();
+  /* iOS unlock: play a silent buffer inside the user gesture */
+  try{
+    const b=actx.createBuffer(1,1,22050);
+    const src=actx.createBufferSource();
+    src.buffer=b; src.connect(actx.destination); src.start(0);
+  }catch(e){}
 }
+/* if iOS suspends the context mid-session (interruption/screen tap), resume on next touch */
+document.addEventListener('touchend',()=>{ if(actx&&actx.state==='suspended') actx.resume(); },{passive:true});
 function bell(freq, when=0, vol=0.16, decay=3.4){
   if(!soundOn||!actx) return;
   const t=actx.currentTime+when;
@@ -383,7 +393,7 @@ function begin(){
   controls.classList.add('hidden');
   endBtn.classList.add('show');
   phaseWord.textContent=phases[0].word;
-  bell(NOTES[phases[0].kind]);
+  bell(NOTES[phases[0].kind],0.15);
   requestWake();
   raf=requestAnimationFrame(tick);
 }
